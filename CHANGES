@@ -1,0 +1,13 @@
+
+Changes (most recent at the top)
+
+Thu Mar  9 14:48:10 EST 2006
+
+- Pass arguments to whatever in 03.t
+
+- Add "verbose" option to print and POD.
+
+
+Tue Mar  7 19:11:40 EDT 2006
+
+- Initial version.

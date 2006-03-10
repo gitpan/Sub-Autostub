@@ -17,7 +17,7 @@ use Scalar::Util qw( &blessed );
 # package variables
 ########################################################################
 
-our $VERSION    = '0.02';
+our $VERSION    = '0.03';
 
 our $AUTOLOAD   = '';
 

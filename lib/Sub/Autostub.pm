@@ -17,41 +17,86 @@ use Scalar::Util qw( &blessed );
 # package variables
 ########################################################################
 
-our $VERSION    = '0.03';
+our $VERSION    = '1.00';
 
 our $AUTOLOAD   = '';
 
-our $verbose    = 0;
+# 0 => nada
+# 1 => call
+# 2 => call + caller
+# 3 => call + caller + args
+
+my $verbosity   = 1;
+
+our $verbose = sub { $verbosity = shift || 1 };
 
 my $print_message
 = sub
 {
-    local $\ = "\n";
-    local $, = "\n\t";
-
-    local $Data::Dumper::Purity     = 1;
-    local $Data::Dumper::Terse      = 1;
-    local $Data::Dumper::Indent     = 1;
-    local $Data::Dumper::Deparse    = 1;
-    local $Data::Dumper::Sortkeys   = 1;
-    local $Data::Dumper::Deepcopy   = 0;
-    local $Data::Dumper::Quotekeys  = 0;
-
-    my $sub = shift;
-
-    my @callinfo = "Stub '$sub'";
-
-    if( $verbose )
+    if( $verbosity )
     {
-        $callinfo[ 0 ] .= 'called at:';
+        local $\ = "\n";
+        local $, = "\n\t";
 
-        push @callinfo, ( caller 1 )[ 0, 1, 2 ];
+        local $Data::Dumper::Purity     = 1;
+        local $Data::Dumper::Terse      = 1;
+        local $Data::Dumper::Indent     = 1;
+        local $Data::Dumper::Deparse    = 1;
+        local $Data::Dumper::Sortkeys   = 1;
+        local $Data::Dumper::Deepcopy   = 0;
+        local $Data::Dumper::Quotekeys  = 0;
 
-        push @callinfo, "\rWith:";
+        my $sub = shift;
+
+        my @callinfo = "Stub '$sub'";
+
+        if( $verbosity > 1 )
+        {
+            $callinfo[ 0 ] .= 'called at:';
+
+            push @callinfo, ( caller 1 )[ 0, 1, 2 ];
+
+        }
+
+        if( $verbosity > 2 )
+        {
+            push @callinfo, "\rWith:", Dumper @_;
+        }
+
+        print @callinfo, 
     };
+};
 
-    print @callinfo, Dumper @_;
+# store the return values for subs by package. this allows
+# returning a fixed argument more interesting than one for
+# any methods.
+#
+# handling updates requires folding any new values in via
+# slice rather than bulk assignment.
+#
+# this also allows callers to get back a local copy of the
+# return values for local assignment.  
+#
+# leaving $returnz->{ $caller } undefined will speed up
+# the exists test, hence the if.
 
+my $returnz = {};
+
+our $return_values =
+sub
+{
+    my $caller = shift;
+
+    my $valuz = $returnz->{ $caller } ||= {};
+
+    if( @_ )
+    {
+        my %argz = @_;
+
+        @$valuz{ keys %argz } = values %argz;
+    }
+
+    $valuz
 };
 
 ########################################################################
@@ -81,21 +126,23 @@ sub import
 
         $print_message->( $sub, @_ );
 
-        # return true for all calls.
+        # return defaults to 1. no telling if the caller
+        # decided that a sub should return zero-but-true 
+        # or undef, so this has to check for an existing
+        # returns entry or zero.
 
-        1
+        exists $returnz->{ $caller }{ $name }
+        ? $returnz->{ $caller }{ $name } : 1;
     };
 
-    # check import args after discarding the package name.
-    # verbose defaults to false.
+    # discard the current package name, then check the
+    # arg's for anything useful. caller gets back either
+    # a hash ref of return values or nada if there were
+    # no arguments.
 
     shift;
 
-    my %argz = @_;
-
-    $verbose = $argz{ verbose } ||= 0;
-
-    ()
+    $return_values->( $caller, @_ );
 }
 
 ########################################################################
@@ -122,7 +169,7 @@ AUTOLOAD
 
             &$print_message;
 
-            1
+            $returnz->{ $class }{ $name } ||= 1
         }
         else
         {
@@ -134,8 +181,7 @@ AUTOLOAD
     }
     else
     {
-        # assume this is a constructor and make a new,
-        # if pretty much useless, object.
+        # assume this is a constructor.
 
         my $proto = shift;
 
@@ -143,7 +189,11 @@ AUTOLOAD
 
         &$print_message;
 
-        bless \$proto, $proto;
+        my ( $class ) = $AUTOLOAD =~ m{ ^ (.+) :: }x;
+
+        my $ref = $returnz->{ $class }{ $name } ||= \$proto;
+
+        bless $ref, $proto;
     }
 }
 
@@ -163,7 +213,7 @@ Sub::Autostub - Stubbed OO and functional calls with logging.
 
     package Foo;
 
-    use Sub::Autostub verbose => 1;
+    use Sub::Autostub;
 
     frobnicate foo => 1, bar => 2;
 
@@ -194,6 +244,45 @@ Sub::Autostub - Stubbed OO and functional calls with logging.
 
     my $obj = Derived->construct();
 
+
+    # sometimes it's handy to get something other 
+    # than 1 back from all of the calls. use makes 
+    #
+    # sets $a to { this => 'test' } verbosely.
+
+    use Sub::Autostub
+    (
+        frobnicate  => { this => 'test' }
+    );
+
+    $Sub::Autostub->verbose( 1 );
+
+    my $a = frobnicate foo => 1;
+
+    # no import mechanism for use base...
+    # $returnz->{ class }{ method } stores the return
+    # value. in this case allowing testify to return
+    # zero but true.
+
+    use base Sub::Autostub;
+
+    $Sub::Autostub::return_values->
+    (
+        {
+            foo => 0E0,
+
+            bar => 'bletch',
+        }
+    );
+
+    $verbose->( 1 );
+
+    # foo and bar now return 0E0 and 'bletch' verbosely.
+
+    $obj->foo;
+
+    $obj->bar;
+
 =head1 DESCRIPTION
 
 During development the entire contents of some modules
@@ -221,10 +310,59 @@ The former case is logged as "Stub construct $package:"
 the latter as "Sub method $name:" each with the arguments
 listed via Data::Dumper.
 
-Setting $Sub::Autostub::verbose = 1 or passing "verbose" 
-with a true value with the "use" will add source line 
-information to the output. For an example see the 
-t/02.t for verbose use, t/03.t for non-verbose.
+=head2 Specific Return Values
+
+There are times when returning 1 for all subs just doesn't
+cut it. A fixed value can be returned for specific sub's
+(even if they don't yet exist) by passing in a hash of 
+sub names and their returns via:
+
+    # Functinal
+
+    use Stub::Autostub
+    qw( foo => 0E0, bar => 'Your Message Here' );
+
+or
+
+    # OO or functional
+
+    $Sub::Autostub::return_values->
+    (
+        foo => 0E0,
+        bar => 'Your Message Here'
+    );
+
+The call to return_values will pass back a hash
+reference, which allows for one-time return values
+via local:
+
+    # test something...
+
+    my $valuz = $Sub::Autostub::return_values->( foo => 1 );
+
+    ...
+
+    sub test_reply
+    {
+        local $valuz->{ reply } => 'The moon! the sun: it is not moonlight now.';
+
+        $katharina->reply( 'how bright and goodly shines the moon!' );
+    }
+
+This could be handy for some situations with Test::* where
+controling the return values is useful for testing handling
+of returned error codes.
+
+=head2 Verbosity
+
+The verbosity of logging output is controlled via:
+
+    $Sub::Autostub::verbose->( $level )
+
+with the levels of 0 (silent), 1 (log call), 2 (log call & 
+caller), or 3 (log call, caller, & arguments).
+
+The default level is 1.
 
 
 =head1 KNOWN ISSUES
@@ -237,11 +375,7 @@ If the first argument in OO code (i.e., via use base) is
 not a referent then it is assumed to be a constructor. This
 is less painful than it seems at first since class methods
 are usually few, coded early, and can be explicitly stubbed
-easily.
-
-Eventually, adding an argument to discern constructor-vs-class
-method (e.g., constructor => 'blah') will be the best way to
-handle this issue.
+easily via code or setting explicit return values.
 
 =item The default object is simplistic.
 
@@ -250,9 +384,17 @@ constructor is the first thing people usually add to a class. After
 that the AUTOLOAD here is never called and the only issue is class
 methods (see previous entry).
 
+Fix for this is either adding an explicit stub constructor
+early or setting the return value for the constructor to 
+some more useful value via $Sub::Autostub::return_values.
+
 =back
 
 =head1 COPYRIGHT
 
+Copyright (C) 2005, Steven Lembark. This code is released
+under the same terms as Perl-5.8.0 itself.
+
 =head1 AUTHOR
 
+Steven Lembark <lembark@wrkhors.com>

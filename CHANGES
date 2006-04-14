@@ -1,6 +1,24 @@
 
 Changes (most recent at the top)
 
+Fri Apr 14 13:26:58 EDT 2006
+
+- $Sub::Autostub::return_values to handle 
+  user-supplied returns for specific sub names.
+
+- $Sub::Autostub::verbose to set verbosity.
+
+- Verbose changed to 0..3 with 0 being slient,
+  1 (default) listing called sub only, 2 adding
+  caller, 3 adding caller + args.
+
+- Updated tests to include return values and
+  verbose.
+
+- Interface won't change at this point and the 
+  AUTOLOAD's seem to work so I'm upping the 
+  version to 1.00.
+
 Thu Mar  9 14:48:10 EST 2006
 
 - Pass arguments to whatever in 03.t

@@ -1,6 +1,5 @@
 
 use strict;
-use FindBin::libs;
 
 use Test::More qw( tests 1 );
 

@@ -1,6 +1,5 @@
 
 use strict;
-use FindBin::libs;
 
 use Symbol;
 

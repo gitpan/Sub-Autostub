@@ -1,6 +1,10 @@
 
 Changes (most recent at the top)
 
+Sun Jul  1 19:07:44 EDT 2007
+
+- fix test bug.
+
 Fri Apr 14 13:26:58 EDT 2006
 
 - $Sub::Autostub::return_values to handle 

@@ -4,7 +4,7 @@ WriteMakefile
 (
 
     NAME            => 'Sub::Autostub',
-    VERSION_FROM    => './lib/Sub/Autostub.pm',
+    VERSION         => 1.01,
     ABSTRACT_FROM   => './lib/Sub/Autostub.pm',
     PREREQ_PM =>
     {
